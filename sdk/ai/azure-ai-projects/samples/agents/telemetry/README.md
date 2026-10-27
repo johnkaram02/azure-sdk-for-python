@@ -1,7 +1,7 @@
 # Application Insights for Python agent conversations
 
 The agent conversation samples share one setup implementation in
-[`samples/util.py`](../../util.py). They reuse the Application Insights
+[`samples/util.py`](https://github.com/Azure/azure-sdk-for-python/blob/main/sdk/ai/azure-ai-projects/samples/util.py). They reuse the Application Insights
 connection already attached to your Foundry project. They do not deploy Azure
 resources, replace connections, or assign roles.
 
@@ -97,11 +97,11 @@ that a new execution was ingested. Allow for ingestion delay when querying.
 The evaluation examples illustrate the same existing-project connection lookup
 and Azure Monitor configuration, and how to consume existing traces:
 
-- [`sample_human_evaluations.py`](../../evaluations/sample_human_evaluations.py)
+- [`sample_human_evaluations.py`](https://github.com/Azure/azure-sdk-for-python/blob/main/sdk/ai/azure-ai-projects/samples/evaluations/sample_human_evaluations.py)
   configures Azure Monitor and emits feedback events with illustrative IDs.
-- [`sample_multiturn_trace_evaluation_by_id.py`](../../evaluations/sample_multiturn_trace_evaluation_by_id.py)
+- [`sample_multiturn_trace_evaluation_by_id.py`](https://github.com/Azure/azure-sdk-for-python/blob/main/sdk/ai/azure-ai-projects/samples/evaluations/sample_multiturn_trace_evaluation_by_id.py)
   selects real conversations/traces for evaluation.
-- [`sample_multiturn_trace_evaluation_agent_filter.py`](../../evaluations/sample_multiturn_trace_evaluation_agent_filter.py)
+- [`sample_multiturn_trace_evaluation_agent_filter.py`](https://github.com/Azure/azure-sdk-for-python/blob/main/sdk/ai/azure-ai-projects/samples/evaluations/sample_multiturn_trace_evaluation_agent_filter.py)
   selects traces by agent/version and time window.
 
 Those evaluation examples do not share an existing bootstrap function: their

@@ -88,7 +88,7 @@ pip show azure-ai-projects
 
 ### Application Insights in agent conversation samples
 
-The agent conversation samples share [one Application Insights setup reference](samples/agents/telemetry/README.md).
+The agent conversation samples share [one Application Insights setup reference](https://github.com/Azure/azure-sdk-for-python/blob/main/sdk/ai/azure-ai-projects/samples/agents/telemetry/README.md).
 They automatically reuse the existing project's connection when available, keep message content capture off by default,
 and warn and continue if tracing cannot be configured. This sample behavior does not provision infrastructure or enable
 tracing for every application that imports the SDK. The console-tracing example remains console-only.
