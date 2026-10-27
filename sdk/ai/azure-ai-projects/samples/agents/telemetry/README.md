@@ -1,9 +1,15 @@
 # Application Insights for Python agent conversations
 
-The agent conversation samples share one setup implementation in
+The validated agent conversation samples share one setup implementation in
 [`samples/util.py`](https://github.com/Azure/azure-sdk-for-python/blob/main/sdk/ai/azure-ai-projects/samples/util.py). They reuse the Application Insights
 connection already attached to your Foundry project. They do not deploy Azure
 resources, replace connections, or assign roles.
+
+This rollout includes samples with passing live or recorded execution. Samples
+without a confirmed pass remain unchanged, including workflows, memory search,
+computer use, Azure Functions, agent-to-agent calls and realtime voice.
+Included samples explicitly enter `agent_tracing` or `agent_tracing_async`;
+the console-tracing example keeps its existing console-only destination.
 
 ## Set up once
 
@@ -29,7 +35,7 @@ resources, replace connections, or assign roles.
 
 When a usable project connection exists, the shared helper configures Azure
 Monitor and explicitly enables the SDK's **experimental GenAI instrumentation**
-before the sample acquires its OpenAI client or opens a realtime connection.
+before the sample acquires its OpenAI client.
 It supplies `AZURE_EXPERIMENTAL_ENABLE_GENAI_TRACING=true` only when that variable
 is unset. This enables preview tracing whose span names and attributes may change.
 
@@ -80,8 +86,8 @@ connection lookup is asynchronous, and the bounded flush runs off the event
 loop. Both adapters share configuration and ownership logic; do not copy the
 exporter setup into each sample or hide it in agent creation.
 
-The context stays active while streams, function-tool continuations, workflow
-steps or realtime conversations complete. It ends the scenario span and attempts
+The context stays active while streams and function-tool continuations
+complete. It ends the scenario span and attempts
 a five-second trace flush even on failure/cancellation, without masking the
 original exception. Only instrumentation activated by the helper is removed.
 The Azure Monitor provider is configured once per process and retains its

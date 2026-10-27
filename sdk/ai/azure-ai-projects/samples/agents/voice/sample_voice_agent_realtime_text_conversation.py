@@ -27,12 +27,9 @@ DESCRIPTION:
     this one).
 
       pip install "azure-ai-projects[voice]>=2.7.0" azure-identity pyaudio
-      pip install azure-monitor-opentelemetry azure-core-tracing-opentelemetry
 
 USAGE:
     python sample_voice_agent_realtime_text_conversation.py
-
-    App Insights setup: see samples/agents/telemetry/README.md.
 
     Environment variables:
     1) FOUNDRY_PROJECT_ENDPOINT (required) - Foundry project endpoint:
@@ -51,7 +48,6 @@ import time
 from typing import Final, Optional, TYPE_CHECKING
 
 from dotenv import load_dotenv
-from util import agent_tracing
 from azure.core.exceptions import HttpResponseError
 from azure.identity import DefaultAzureCredential
 from azure.ai.projects import AIProjectClient
@@ -359,7 +355,6 @@ def text_conversation() -> None:
     with (
         DefaultAzureCredential() as credential,
         AIProjectClient(endpoint=endpoint, credential=credential, allow_preview=True) as project_client,
-        agent_tracing(project_client, scenario=os.path.basename(__file__)),
     ):
         created_version = None
         try:

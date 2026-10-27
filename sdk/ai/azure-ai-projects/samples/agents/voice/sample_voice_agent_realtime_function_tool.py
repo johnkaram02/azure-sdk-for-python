@@ -18,12 +18,9 @@ DESCRIPTION:
 USAGE:
     python sample_voice_agent_realtime_function_tool.py
 
-    App Insights setup: see samples/agents/telemetry/README.md.
-
     Before running the sample:
 
     pip install "azure-ai-projects[voice]>=2.7.0" azure-identity python-dotenv
-    pip install azure-monitor-opentelemetry azure-core-tracing-opentelemetry
 
     Set these environment variables with your own values:
     1) FOUNDRY_PROJECT_ENDPOINT - The Azure AI Project endpoint.
@@ -40,7 +37,6 @@ import sys
 from typing import Any, Final, List, Tuple, cast
 
 from dotenv import load_dotenv
-from util import agent_tracing
 from azure.identity import DefaultAzureCredential
 from azure.ai.projects import AIProjectClient
 from azure.ai.projects.models import (
@@ -181,7 +177,6 @@ def main() -> None:
     with (
         DefaultAzureCredential() as credential,
         AIProjectClient(endpoint=endpoint, credential=credential, allow_preview=True) as project_client,
-        agent_tracing(project_client, scenario=os.path.basename(__file__)),
     ):
         created_version = None
         try:

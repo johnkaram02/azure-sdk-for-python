@@ -15,12 +15,9 @@ DESCRIPTION:
 USAGE:
     python sample_agent_memory_search.py
 
-    App Insights setup: see samples/agents/telemetry/README.md.
-
     Before running the sample:
 
     pip install "azure-ai-projects>=2.0.0" python-dotenv
-    pip install azure-monitor-opentelemetry azure-core-tracing-opentelemetry
 
     Deploy a chat model (e.g. gpt-4.1) and an embedding model (e.g. text-embedding-3-small).
     Once you have deployed models, set the deployment name in the variables below.
@@ -40,7 +37,7 @@ USAGE:
 import os
 import time
 from dotenv import load_dotenv
-from util import agent_tracing, create_version_with_endpoint
+from util import create_version_with_endpoint
 from azure.identity import DefaultAzureCredential
 from azure.core.exceptions import ResourceNotFoundError
 from azure.ai.projects import AIProjectClient
@@ -92,7 +89,6 @@ tool = MemorySearchPreviewTool(
 with (
     credential,
     project_client,
-    agent_tracing(project_client, scenario=os.path.basename(__file__)),
     create_version_with_endpoint(
         project_client=project_client,
         agent_name=AGENT_NAME,

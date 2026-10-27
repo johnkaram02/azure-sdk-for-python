@@ -29,6 +29,21 @@ PRIVACY_SETTINGS = [
     "AZURE_TRACING_GEN_AI_INCLUDE_BINARY_DATA",
     "AZURE_TRACING_GEN_AI_TRACE_CONTEXT_PROPAGATION_INCLUDE_BAGGAGE",
 ]
+DEFERRED_CONVERSATIONS = {
+    "sample_workflow_multi_agent.py",
+    "sample_workflow_multi_agent_async.py",
+    "sample_workflow_multi_agent_with_mcp_approval.py",
+    "sample_agent_azure_function.py",
+    "sample_agent_computer_use.py",
+    "sample_agent_computer_use_async.py",
+    "sample_agent_memory_search.py",
+    "sample_agent_memory_search_async.py",
+    "sample_agent_to_agent.py",
+    "sample_voice_agent_realtime_audio_conversation_async.py",
+    "sample_voice_agent_realtime_function_tool.py",
+    "sample_voice_agent_realtime_text_conversation.py",
+    "sample_voice_agent_realtime_text_conversation_async.py",
+}
 
 
 @pytest.fixture
@@ -376,7 +391,7 @@ def test_sample_executor_playback_disables_only_automatic_cloud_setup(
     assert util.os.environ[util._TRACING_GATE] == "inherited"
 
 
-@pytest.mark.parametrize("folder", ["", "tools", "telemetry", "voice"])
+@pytest.mark.parametrize("folder", ["", "tools", "telemetry"])
 def test_folder_shims_share_the_same_setup_functions_and_ownership_state(folder):
     path = PACKAGE_ROOT / "samples" / "agents" / folder / "util.py"
     spec = importlib.util.spec_from_file_location("sample_tracing_shim", path)
@@ -390,6 +405,7 @@ def test_folder_shims_share_the_same_setup_functions_and_ownership_state(folder)
 def test_every_eligible_entrypoint_reuses_setup_before_client_acquisition():
     agents = PACKAGE_ROOT / "samples" / "agents"
     included = []
+    deferred = set()
     for path in sorted(agents.rglob("sample*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8-sig"))
         calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call)]
@@ -400,8 +416,10 @@ def test_every_eligible_entrypoint_reuses_setup_before_client_acquisition():
             for name in names
         ):
             continue
-        if path.name == "sample_agent_basic_with_console_tracing.py":
+        if path.name in DEFERRED_CONVERSATIONS or path.name == "sample_agent_basic_with_console_tracing.py":
             assert not any(name in ("agent_tracing", "agent_tracing_async") for name in names)
+            if path.name in DEFERRED_CONVERSATIONS:
+                deferred.add(path.name)
             continue
         included.append(path)
         helper_calls = [node for node in calls if ast.unparse(node.func) in ("agent_tracing", "agent_tracing_async")]
@@ -413,4 +431,5 @@ def test_every_eligible_entrypoint_reuses_setup_before_client_acquisition():
         assert all(helper_call.lineno < node.lineno for node in client_calls), path
         assert "azure-monitor-opentelemetry" in ast.get_docstring(tree), path
         assert "samples/agents/telemetry/README.md" in ast.get_docstring(tree), path
-    assert len(included) == 59
+    assert deferred == DEFERRED_CONVERSATIONS
+    assert len(included) == 46
