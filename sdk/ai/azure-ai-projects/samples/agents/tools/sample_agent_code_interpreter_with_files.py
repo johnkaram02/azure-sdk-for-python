@@ -12,9 +12,12 @@ DESCRIPTION:
 USAGE:
     python sample_agent_code_interpreter_with_files.py
 
+    App Insights setup: see samples/agents/telemetry/README.md.
+
     Before running the sample:
 
     pip install "azure-ai-projects>=2.0.0" python-dotenv
+    pip install azure-monitor-opentelemetry azure-core-tracing-opentelemetry
 
     Set these environment variables with your own values:
     1) FOUNDRY_PROJECT_ENDPOINT - The Azure AI Project endpoint, as found in the Overview
@@ -27,6 +30,7 @@ USAGE:
 import os
 import tempfile
 from dotenv import load_dotenv
+from util import agent_tracing
 from azure.identity import DefaultAzureCredential
 from azure.ai.projects import AIProjectClient
 from azure.ai.projects.models import PromptAgentDefinition, CodeInterpreterTool, AutoCodeInterpreterToolParam
@@ -38,6 +42,7 @@ endpoint = os.environ["FOUNDRY_PROJECT_ENDPOINT"]
 with (
     DefaultAzureCredential() as credential,
     AIProjectClient(endpoint=endpoint, credential=credential) as project_client,
+    agent_tracing(project_client, scenario=os.path.basename(__file__)),
     project_client.get_openai_client() as openai_client,
 ):
 

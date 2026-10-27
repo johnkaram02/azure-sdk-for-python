@@ -764,6 +764,12 @@ class SyncSampleExecutor(BaseSampleExecutor):
             mp.setenv("AZURE_AI_PROJECTS_CONSOLE_LOGGING", "true")
             for var_name, var_value in self.env_vars.items():
                 mp.setenv(var_name, var_value)
+            if (
+                not is_live()
+                and f"{os.sep}agents{os.sep}" in os.path.abspath(self.sample_path)
+                and "with_console_tracing" not in os.path.basename(self.sample_path)
+            ):
+                mp.setenv("AZURE_EXPERIMENTAL_ENABLE_GENAI_TRACING", "false")
             if self.spec.loader is None:
                 raise ImportError(f"Could not load module {self.spec.name} from {self.sample_path}")
 
@@ -971,6 +977,12 @@ class AsyncSampleExecutor(BaseSampleExecutor):
             mp.setenv("AZURE_AI_PROJECTS_CONSOLE_LOGGING", "true")
             for var_name, var_value in self.env_vars.items():
                 mp.setenv(var_name, var_value)
+            if (
+                not is_live()
+                and f"{os.sep}agents{os.sep}" in os.path.abspath(self.sample_path)
+                and "with_console_tracing" not in os.path.basename(self.sample_path)
+            ):
+                mp.setenv("AZURE_EXPERIMENTAL_ENABLE_GENAI_TRACING", "false")
             if self.spec.loader is None:
                 raise ImportError(f"Could not load module {self.spec.name} from {self.sample_path}")
             try:

@@ -12,8 +12,12 @@ _SAMPLES_UTIL_PATH = Path(__file__).resolve().parents[1] / "util.py"
 _PKG_ROOT = Path(__file__).resolve().parents[2]
 if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
-from samples.util import create_version_with_endpoint as _create_version_with_endpoint
-from samples.util import create_version_with_endpoint_async as _create_version_with_endpoint_async
+from samples.util import (
+    agent_tracing as _agent_tracing,
+    agent_tracing_async as _agent_tracing_async,
+    create_version_with_endpoint as _create_version_with_endpoint,
+    create_version_with_endpoint_async as _create_version_with_endpoint_async,
+)
 
 if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
@@ -27,3 +31,5 @@ _SPEC.loader.exec_module(_MODULE)
 
 create_version_with_endpoint = _create_version_with_endpoint
 create_version_with_endpoint_async = _create_version_with_endpoint_async
+agent_tracing = _agent_tracing
+agent_tracing_async = _agent_tracing_async

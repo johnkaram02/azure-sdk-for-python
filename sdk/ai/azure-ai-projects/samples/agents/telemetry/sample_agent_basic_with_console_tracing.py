@@ -12,6 +12,8 @@ DESCRIPTION:
 USAGE:
     python sample_agent_basic_with_console_tracing.py
 
+    For the Azure Monitor alternative, see samples/agents/telemetry/README.md.
+
     Before running the sample:
 
     pip install "azure-ai-projects>=2.0.0" python-dotenv opentelemetry-sdk azure-core-tracing-opentelemetry

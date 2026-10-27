@@ -12,9 +12,12 @@ DESCRIPTION:
 USAGE:
     python sample_agent_work_iq_async.py
 
+    App Insights setup: see samples/agents/telemetry/README.md.
+
     Before running the sample:
 
     pip install "azure-ai-projects>=2.2.0" python-dotenv aiohttp
+    pip install azure-monitor-opentelemetry azure-core-tracing-opentelemetry
 
     Set these environment variables with your own values:
     1) FOUNDRY_PROJECT_ENDPOINT - The Azure AI Project endpoint, as found in the Overview
@@ -29,7 +32,7 @@ USAGE:
 import os
 import asyncio
 from dotenv import load_dotenv
-from util import create_version_with_endpoint_async
+from util import agent_tracing_async, create_version_with_endpoint_async
 from azure.identity.aio import DefaultAzureCredential
 from azure.ai.projects.aio import AIProjectClient
 from azure.ai.projects.models import PromptAgentDefinition, WorkIQPreviewTool
@@ -48,6 +51,7 @@ async def main():
     async with (
         DefaultAzureCredential() as credential,
         AIProjectClient(endpoint=endpoint, credential=credential) as project_client,
+        agent_tracing_async(project_client, scenario=os.path.basename(__file__)),
         create_version_with_endpoint_async(
             project_client=project_client,
             agent_name=agent_name,

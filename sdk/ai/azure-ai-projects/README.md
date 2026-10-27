@@ -86,6 +86,13 @@ pip show azure-ai-projects
 
 ## Key concepts
 
+### Application Insights in agent conversation samples
+
+The agent conversation samples share [one Application Insights setup reference](samples/agents/telemetry/README.md).
+They automatically reuse the existing project's connection when available, keep message content capture off by default,
+and warn and continue if tracing cannot be configured. This sample behavior does not provision infrastructure or enable
+tracing for every application that imports the SDK. The console-tracing example remains console-only.
+
 ### Create and authenticate the client with Entra ID
 
 Entra ID is the only authentication method currently supported by the client.

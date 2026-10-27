@@ -24,9 +24,12 @@ DESCRIPTION:
     conversation with barge-in, see sample_voice_agent_realtime_audio_conversation_async.py.
 
       pip install "azure-ai-projects[voice]>=2.7.0" azure-identity pyaudio
+      pip install azure-monitor-opentelemetry azure-core-tracing-opentelemetry
 
 USAGE:
     python sample_voice_agent_realtime_text_conversation_async.py
+
+    App Insights setup: see samples/agents/telemetry/README.md.
 
     Environment variables:
     1) FOUNDRY_PROJECT_ENDPOINT (required) - Foundry project endpoint:
@@ -45,6 +48,7 @@ import sys
 from typing import Final, Optional
 
 from dotenv import load_dotenv
+from util import agent_tracing_async
 from azure.core.exceptions import HttpResponseError
 from azure.identity.aio import DefaultAzureCredential
 
@@ -362,6 +366,7 @@ async def text_conversation() -> None:
     async with (
         DefaultAzureCredential() as credential,
         AIProjectClient(endpoint=endpoint, credential=credential, allow_preview=True) as project_client,
+        agent_tracing_async(project_client, scenario=os.path.basename(__file__)),
     ):
         created_version = None
         try:
