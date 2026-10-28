@@ -46,9 +46,9 @@ AZURE_EXPERIMENTAL_ENABLE_GENAI_TRACING=false
 ```
 
 Opting out does not disconnect Application Insights or disable service-generated
-project traces. An existing caller-managed provider is left unchanged, rather
-than replaced or given another exporter. In that case the caller remains
-responsible for its destination, instrumentation and lifecycle.
+project traces. An existing caller-managed provider or SDK instrumentation is
+left unchanged, rather than reconfigured or given another exporter. In that case
+the caller remains responsible for its destination, instrumentation and lifecycle.
 
 Message content and tool arguments/results are not recorded by default. Keep
 `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` unset or `false`. Set it to

@@ -24,18 +24,9 @@ if str(_PKG_ROOT) not in sys.path:
 
 from azure.ai.projects import AIProjectClient
 from azure.ai.projects.aio import AIProjectClient as AsyncAIProjectClient
-from azure.ai.projects.models import (
-    AgentBlueprintReference,
-    AgentDefinition,
-    AgentEndpointConfig,
-    AgentVersionDetails,
-    FixedRatioVersionSelectionRule,
-    ProtocolConfiguration,
-    ResponsesProtocolConfiguration,
-    VersionSelector,
-)
 
 if TYPE_CHECKING:
+    from azure.ai.projects.models import AgentBlueprintReference, AgentDefinition, AgentVersionDetails
     from azure.ai.projects.telemetry import AIProjectInstrumentor
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.trace import Tracer
@@ -74,6 +65,7 @@ def _start_sample_tracing(connection_string: Optional[str]) -> Optional["Tracer"
     if not connection_string:
         return None
 
+    tracer = None
     try:
         from azure.ai.projects.telemetry import AIProjectInstrumentor
         from azure.monitor.opentelemetry import configure_azure_monitor
@@ -82,16 +74,24 @@ def _start_sample_tracing(connection_string: Optional[str]) -> Optional["Tracer"
         from opentelemetry.trace import ProxyTracerProvider
 
         with _TRACING_LOCK:
+            instrumentor = AIProjectInstrumentor()
+            if instrumentor.is_instrumented() and _tracing_state.instrumentor is None:
+                _tracing_warning("caller-managed instrumentation; configuration and settings were left unchanged")
+                return None
             provider = trace.get_tracer_provider()
             destination = hashlib.sha256(connection_string.encode("utf-8")).digest()
             if _tracing_state.provider is None:
                 if not isinstance(provider, ProxyTracerProvider):
                     _tracing_warning("caller-managed telemetry; its provider and destination were left unchanged")
                     return None
-                configure_azure_monitor(
-                    connection_string=connection_string,
-                    logger_name="azure.ai.projects.samples",
-                )
+                try:
+                    configure_azure_monitor(
+                        connection_string=connection_string,
+                        logger_name="azure.ai.projects.samples",
+                    )
+                finally:
+                    if instrumentor.is_instrumented():
+                        _tracing_state.instrumentor = instrumentor
                 configured_provider = trace.get_tracer_provider()
                 if not isinstance(configured_provider, TracerProvider):
                     _tracing_warning("Azure Monitor did not install a supported tracer provider")
@@ -103,32 +103,42 @@ def _start_sample_tracing(connection_string: Optional[str]) -> Optional["Tracer"
                 return None
 
             os.environ.setdefault(_TRACING_GATE, "true")
-            instrumentor = AIProjectInstrumentor()
             if not instrumentor.is_instrumented():
-                instrumentor.instrument()
-                if instrumentor.is_instrumented():
-                    _tracing_state.instrumentor = instrumentor
+                try:
+                    instrumentor.instrument()
+                finally:
+                    if instrumentor.is_instrumented():
+                        _tracing_state.instrumentor = instrumentor
             if instrumentor.is_instrumented():
+                tracer = trace.get_tracer("azure.ai.projects.samples")
                 _tracing_state.users += 1
-                return trace.get_tracer("azure.ai.projects.samples")
-            _tracing_warning("GenAI instrumentation did not activate")
+            else:
+                _tracing_warning("GenAI instrumentation did not activate")
     except ImportError:
         _tracing_warning("install azure-monitor-opentelemetry and azure-core-tracing-opentelemetry")
     except (AzureError, OSError, ValueError, RuntimeError) as error:
         _tracing_warning(type(error).__name__)
-    return None
+    finally:
+        if tracer is None:
+            with _TRACING_LOCK:
+                _uninstrument_sample_tracing()
+    return tracer
+
+
+def _uninstrument_sample_tracing() -> None:
+    if _tracing_state.users == 0 and _tracing_state.instrumentor is not None:
+        try:
+            _tracing_state.instrumentor.uninstrument()
+        except (AzureError, OSError, ValueError, RuntimeError) as error:
+            _tracing_warning(f"instrumentation cleanup: {type(error).__name__}")
+        else:
+            _tracing_state.instrumentor = None
 
 
 def _finish_sample_tracing() -> None:
     with _TRACING_LOCK:
         _tracing_state.users -= 1
-        if _tracing_state.users == 0 and _tracing_state.instrumentor is not None:
-            try:
-                _tracing_state.instrumentor.uninstrument()
-            except (AzureError, OSError, ValueError, RuntimeError) as error:
-                _tracing_warning(f"instrumentation cleanup: {type(error).__name__}")
-            finally:
-                _tracing_state.instrumentor = None
+        _uninstrument_sample_tracing()
         provider = _tracing_state.provider
     if provider is not None:
         try:
@@ -146,12 +156,12 @@ def _scenario_span(tracer: Optional["Tracer"], scenario: str) -> Iterator[None]:
     with tracer.start_as_current_span(scenario, record_exception=False, set_status_on_exception=False) as span:
         try:
             yield
-        finally:
+        except BaseException:
             # Exception messages and stack traces can contain content even when message capture is off.
-            if sys.exc_info()[0] is not None:
-                from opentelemetry.trace import StatusCode
+            from opentelemetry.trace import StatusCode
 
-                span.set_status(StatusCode.ERROR)
+            span.set_status(StatusCode.ERROR)
+            raise
 
 
 @contextmanager
@@ -258,14 +268,22 @@ def create_version_with_endpoint(
     project_client: AIProjectClient,
     agent_name: str,
     *,
-    definition: AgentDefinition,
+    definition: "AgentDefinition",
     metadata: Optional[dict[str, str]] = None,
     description: Optional[str] = None,
-    blueprint_reference: Optional[AgentBlueprintReference] = None,
+    blueprint_reference: Optional["AgentBlueprintReference"] = None,
     draft: Optional[bool] = None,
     **kwargs: Any,
-) -> Iterator[AgentVersionDetails]:
+) -> Iterator["AgentVersionDetails"]:
     """Create a version, point the agent endpoint to it, then restore and delete on exit."""
+    from azure.ai.projects.models import (
+        AgentEndpointConfig,
+        FixedRatioVersionSelectionRule,
+        ProtocolConfiguration,
+        ResponsesProtocolConfiguration,
+        VersionSelector,
+    )
+
     created_version = None
     original_agent_endpoint = None
 
@@ -308,14 +326,22 @@ async def create_version_with_endpoint_async(
     project_client: AsyncAIProjectClient,
     agent_name: str,
     *,
-    definition: AgentDefinition,
+    definition: "AgentDefinition",
     metadata: Optional[dict[str, str]] = None,
     description: Optional[str] = None,
-    blueprint_reference: Optional[AgentBlueprintReference] = None,
+    blueprint_reference: Optional["AgentBlueprintReference"] = None,
     draft: Optional[bool] = None,
     **kwargs: Any,
-) -> AsyncIterator[AgentVersionDetails]:
+) -> AsyncIterator["AgentVersionDetails"]:
     """Async variant of :func:`create_version_with_endpoint`."""
+    from azure.ai.projects.models import (
+        AgentEndpointConfig,
+        FixedRatioVersionSelectionRule,
+        ProtocolConfiguration,
+        ResponsesProtocolConfiguration,
+        VersionSelector,
+    )
+
     created_version = None
     original_agent_endpoint = None
 

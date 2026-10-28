@@ -9,7 +9,7 @@ import importlib.util
 import logging
 import sys
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -105,6 +105,88 @@ def test_setup_does_not_opt_in_to_content_binary_or_baggage_capture(tracing):
     with util.agent_tracing(tracing.client, scenario="privacy-defaults"):
         assert all(setting not in util.os.environ for setting in PRIVACY_SETTINGS)
     assert all(setting not in util.os.environ for setting in PRIVACY_SETTINGS)
+
+
+def test_tracing_only_import_does_not_require_endpoint_models(monkeypatch):
+    models = sys.modules["azure.ai.projects.models"]
+    legacy_models = ModuleType(models.__name__)
+    endpoint_models = {
+        "AgentBlueprintReference",
+        "AgentDefinition",
+        "AgentEndpointConfig",
+        "AgentVersionDetails",
+        "FixedRatioVersionSelectionRule",
+        "ProtocolConfiguration",
+        "ResponsesProtocolConfiguration",
+        "VersionSelector",
+    }
+
+    def resolve(name):
+        if name in endpoint_models:
+            raise AttributeError(name)
+        return getattr(models, name)
+
+    monkeypatch.setattr(legacy_models, "__getattr__", resolve, raising=False)
+    monkeypatch.setitem(sys.modules, models.__name__, legacy_models)
+    spec = importlib.util.spec_from_file_location("legacy_sample_util", PACKAGE_ROOT / "samples" / "util.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, spec.name, module)
+    monkeypatch.setenv(util._TRACING_GATE, "false")
+    spec.loader.exec_module(module)
+    with module.agent_tracing(SimpleNamespace(), scenario="legacy-sdk"):
+        pass
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+def test_configuration_activated_instrumentation_is_owned_and_removed(tracing, asynchronous):
+    tracing.monkeypatch.setenv(util._TRACING_GATE, "true")
+
+    def configure(**_):
+        tracing.monkeypatch.setattr(trace, "_TRACER_PROVIDER", tracing.provider)
+        tracing.instrumentor.instrument()
+
+    tracing.configure.side_effect = configure
+    if asynchronous:
+        tracing.client.telemetry.get_application_insights_connection_string = AsyncMock(
+            return_value="test-connection-not-a-secret"
+        )
+
+        async def conversation():
+            async with util.agent_tracing_async(tracing.client, scenario="auto-instrumented"):
+                assert tracing.state.active
+
+        asyncio.run(conversation())
+    else:
+        with util.agent_tracing(tracing.client, scenario="auto-instrumented"):
+            assert tracing.state.active
+    tracing.instrumentor.instrument.assert_called_once()
+    tracing.instrumentor.uninstrument.assert_called_once()
+    assert not tracing.state.active
+    assert util._tracing_state.users == 0
+
+
+@pytest.mark.parametrize("phase", ["configuration", "instrumentation"])
+def test_partial_activation_failure_removes_owned_instrumentation(tracing, caplog, phase):
+    def activate():
+        tracing.state.active = True
+        if phase == "instrumentation":
+            raise RuntimeError("partial activation")
+
+    def configure(**_):
+        tracing.monkeypatch.setattr(trace, "_TRACER_PROVIDER", tracing.provider)
+        if phase == "configuration":
+            tracing.state.active = True
+            raise RuntimeError("partial configuration")
+
+    tracing.configure.side_effect = configure
+    tracing.instrumentor.instrument.side_effect = activate
+    with util.agent_tracing(tracing.client, scenario="partial-activation"):
+        assert not tracing.state.active
+    assert "RuntimeError" in caplog.text
+    tracing.instrumentor.uninstrument.assert_called_once()
+    assert util._tracing_state.users == 0
+    assert not tracing.exporter.get_finished_spans()
 
 
 @pytest.mark.parametrize("setting", PRIVACY_SETTINGS)
@@ -213,12 +295,15 @@ def test_preexisting_provider_is_left_unchanged(tracing, caplog):
     assert "caller-managed" in caplog.text
 
 
-def test_preexisting_instrumentation_is_not_reconfigured_or_removed(tracing):
+def test_preexisting_instrumentation_is_not_reconfigured_or_removed(tracing, caplog):
     tracing.state.active = True
     with util.agent_tracing(tracing.client, scenario="caller-instrumented"):
         pass
     tracing.instrumentor.instrument.assert_not_called()
     tracing.instrumentor.uninstrument.assert_not_called()
+    tracing.configure.assert_not_called()
+    assert tracing.state.active
+    assert "caller-managed instrumentation" in caplog.text
 
 
 def test_different_destination_does_not_duplicate_exporters(tracing, caplog):
@@ -251,6 +336,32 @@ def test_scenario_error_does_not_export_exception_content(tracing):
     assert "PRIVATE-CONVERSATION-CONTENT" not in repr((span.attributes, span.events, span.status.description))
 
 
+@pytest.mark.parametrize("asynchronous", [False, True])
+def test_successful_fallback_does_not_inherit_the_callers_handled_exception(tracing, asynchronous):
+    if asynchronous:
+        tracing.client.telemetry.get_application_insights_connection_string = AsyncMock(
+            return_value="test-connection-not-a-secret"
+        )
+
+        async def conversation():
+            try:
+                raise ValueError("already handled")
+            except ValueError:
+                async with util.agent_tracing_async(tracing.client, scenario="successful-fallback"):
+                    await asyncio.sleep(0)
+
+        asyncio.run(conversation())
+    else:
+        try:
+            raise ValueError("already handled")
+        except ValueError:
+            with util.agent_tracing(tracing.client, scenario="successful-fallback"):
+                pass
+    span = tracing.exporter.get_finished_spans()[0]
+    assert span.status.status_code == trace.StatusCode.UNSET
+    assert not span.events
+
+
 @pytest.mark.parametrize("flush_result", [False, OSError("flush failed")])
 def test_flush_failure_warns_without_masking_original_error(tracing, caplog, flush_result):
     flush = MagicMock(return_value=flush_result) if flush_result is False else MagicMock(side_effect=flush_result)
@@ -267,6 +378,28 @@ def test_cleanup_failure_does_not_mask_conversation_error(tracing, caplog):
         with util.agent_tracing(tracing.client, scenario="cleanup-failure"):
             raise ValueError("conversation failure")
     assert "instrumentation cleanup" in caplog.text
+
+
+def test_cleanup_failure_retains_ownership_for_a_later_retry(tracing, caplog):
+    attempts = 0
+
+    def cleanup():
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("temporary cleanup failure")
+        tracing.state.active = False
+
+    tracing.instrumentor.uninstrument.side_effect = cleanup
+    with util.agent_tracing(tracing.client, scenario="cleanup-failure"):
+        pass
+    assert tracing.state.active
+    assert "instrumentation cleanup" in caplog.text
+    with util.agent_tracing(tracing.client, scenario="cleanup-retry"):
+        assert tracing.state.active
+    assert not tracing.state.active
+    assert util._tracing_state.instrumentor is None
+    tracing.configure.assert_called_once()
 
 
 def test_async_uses_same_configuration_and_lifecycle(tracing):
@@ -328,6 +461,7 @@ def test_async_cancellation_closes_span_and_flushes(tracing):
     flush.assert_called_once()
     assert not tracing.state.active
     assert tracing.exporter.get_finished_spans()[0].name == "cancelled-async"
+    assert tracing.exporter.get_finished_spans()[0].status.status_code == trace.StatusCode.ERROR
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])
